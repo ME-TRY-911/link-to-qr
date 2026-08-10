@@ -59,6 +59,46 @@ export const SeoContentSection: React.FC = () => {
             </p>
           </div>
 
+          {/* URL to QR Code Section */}
+          <div className="space-y-4 pt-6 border-t border-slate-700/60">
+            <div className="flex items-center gap-3 text-white">
+              <div className="p-2 rounded-lg bg-indigo-600/20 text-indigo-400 border border-indigo-500/30">
+                <QrCode className="w-5 h-5" />
+              </div>
+
+              <h3 className="text-xl sm:text-2xl font-bold text-white font-heading">
+                URL to QR Code Generator
+              </h3>
+            </div>
+
+            <p>
+              Convert any website URL or link into a QR code in seconds. A URL QR code
+              lets people open a website, landing page, online store, social profile,
+              or other web link by simply scanning the code with their smartphone.
+            </p>
+
+            <h4 className="text-lg font-bold text-white font-heading">
+              How to Convert a URL to a QR Code
+            </h4>
+
+            <ol className="list-decimal pl-5 space-y-2">
+              <li>Enter your website URL or link into the URL QR code generator.</li>
+              <li>Customize the QR code with your preferred style, color, or logo.</li>
+              <li>Generate the QR code.</li>
+              <li>Download and use your QR code online or in print.</li>
+            </ol>
+
+            <h4 className="text-lg font-bold text-white font-heading">
+              Create a QR Code for Any Link
+            </h4>
+
+            <p>
+              You can create a QR code for websites, landing pages, online stores,
+              social media profiles, portfolios, event pages, menus, and other
+              publicly accessible links.
+            </p>
+          </div>
+
           {/* Section 2: Why Choose Link to QR */}
           <div className="space-y-4 pt-6 border-t border-slate-700/60">
             <div className="flex items-center gap-3 text-white">
