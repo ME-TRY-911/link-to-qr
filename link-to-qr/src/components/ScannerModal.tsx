@@ -108,6 +108,7 @@ export const ScannerModal: React.FC<ScannerModalProps> = ({
                 <ExternalLink className="w-3.5 h-3.5" />
               </a>
             )}
+      
 
             <button
               onClick={handleCopy}
