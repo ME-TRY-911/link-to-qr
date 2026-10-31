@@ -10,6 +10,7 @@ import {
   saveDraftConfigCache, loadDraftConfigCache, saveToHistoryCache, 
   createQrCacheKey, getCachedQrDataUrl, setCachedQrDataUrl 
 } from '../../utils/cacheManager';
+import { BRAND_LOGO_DATA_URI } from '../../utils/brandLogoData';
 import { TypeForms } from './TypeForms';
 import { saveQrCodeToFirestore } from '../../lib/firebase';
 import { 
@@ -105,7 +106,12 @@ export const QrGeneratorCard: React.FC<QrGeneratorCardProps> = ({ onOpenScanModa
 
   const [config, setConfig] = useState<QrConfig>(() => {
     const cachedDraft = loadDraftConfigCache();
-    if (cachedDraft) return cachedDraft;
+    if (cachedDraft) {
+      return {
+        ...cachedDraft,
+        includeBranding: cachedDraft.includeBranding !== undefined ? cachedDraft.includeBranding : true,
+      };
+    }
     return {
       type: 'url',
       url: 'https://linktoqr.in',
@@ -133,6 +139,7 @@ export const QrGeneratorCard: React.FC<QrGeneratorCardProps> = ({ onOpenScanModa
       errorCorrectionLevel: 'H',
       size: 1024,
       isDynamic: false,
+      includeBranding: true,
     };
   });
 
@@ -207,6 +214,15 @@ export const QrGeneratorCard: React.FC<QrGeneratorCardProps> = ({ onOpenScanModa
     if (!canvasRef.current) return;
     const payload = generateQrPayload(config);
     renderQrToCanvas(canvasRef.current, payload, config, 600);
+
+    // Preload brand logo and guarantee canvas refresh once decoded
+    const brandImg = new Image();
+    brandImg.onload = () => {
+      if (canvasRef.current) {
+        renderQrToCanvas(canvasRef.current, payload, config, 600);
+      }
+    };
+    brandImg.src = BRAND_LOGO_DATA_URI;
   }, [config]);
 
   // File logo upload handler
@@ -255,13 +271,17 @@ export const QrGeneratorCard: React.FC<QrGeneratorCardProps> = ({ onOpenScanModa
     });
 
     triggerConfetti();
-    showToast(`PNG Downloaded (${config.size}x${config.size}px High Res)`);
+    showToast(
+      config.includeBranding !== false
+        ? `PNG Downloaded with Link to QR branding (${config.size}px)`
+        : `PNG Downloaded (${config.size}x${config.size}px High Res)`
+    );
   };
 
   const handleDownloadSvg = async () => {
     const payload = generateQrPayload(config);
     try {
-      const svgString = await QRCode.toString(payload, {
+      let svgString = await QRCode.toString(payload, {
         type: 'svg',
         margin: 2,
         errorCorrectionLevel: config.errorCorrectionLevel,
@@ -270,6 +290,43 @@ export const QrGeneratorCard: React.FC<QrGeneratorCardProps> = ({ onOpenScanModa
           light: config.transparentBg ? '#00000000' : config.bgColor,
         },
       });
+
+      // Inject Link to QR website name & logo branding badge in SVG if includeBranding is true
+      if (config.includeBranding !== false) {
+        const vbMatch = svgString.match(/viewBox="0 0 ([0-9.]+) ([0-9.]+)"/);
+        if (vbMatch) {
+          const w = parseFloat(vbMatch[1]);
+          const h = parseFloat(vbMatch[2]);
+          const footerH = w * 0.22;
+          const newH = h + footerH;
+          svgString = svgString.replace(/viewBox="0 0 [0-9.]+ [0-9.]+"/, `viewBox="0 0 ${w} ${newH}"`);
+          svgString = svgString.replace(new RegExp(`d="M0 0h${w}v${h}H0z"`), `d="M0 0h${w}v${newH}H0z"`);
+
+          const isDarkBg = !config.transparentBg && config.bgColor && (
+            config.bgColor.toLowerCase() === '#000000' ||
+            config.bgColor.toLowerCase() === '#0f172a' ||
+            config.bgColor.toLowerCase().startsWith('#1')
+          );
+          const pillFill = isDarkBg ? '#1e293b' : '#f8fafc';
+          const pillBorder = isDarkBg ? '#334155' : '#e2e8f0';
+          const titleColor = isDarkBg ? '#ffffff' : '#0f172a';
+          const subColor = isDarkBg ? '#94a3b8' : '#64748b';
+
+          const brandingSvg = `<g id="linktoqr-brand-footer" transform="translate(0, ${h})">
+            <defs>
+              <clipPath id="linktoqr-brand-logo-clip">
+                <rect x="${(w * 0.08).toFixed(2)}" y="${(footerH * 0.23).toFixed(2)}" width="${(footerH * 0.55).toFixed(2)}" height="${(footerH * 0.55).toFixed(2)}" rx="${(footerH * 0.16).toFixed(2)}" />
+              </clipPath>
+            </defs>
+            <rect x="${(w * 0.05).toFixed(2)}" y="${(footerH * 0.15).toFixed(2)}" width="${(w * 0.9).toFixed(2)}" height="${(footerH * 0.72).toFixed(2)}" rx="${(footerH * 0.22).toFixed(2)}" fill="${pillFill}" stroke="${pillBorder}" stroke-width="${(w * 0.005).toFixed(2)}" />
+            <rect x="${(w * 0.08).toFixed(2)}" y="${(footerH * 0.23).toFixed(2)}" width="${(footerH * 0.55).toFixed(2)}" height="${(footerH * 0.55).toFixed(2)}" rx="${(footerH * 0.16).toFixed(2)}" fill="#ffffff" stroke="#6366f1" stroke-width="${(w * 0.004).toFixed(2)}" />
+            <image href="${BRAND_LOGO_DATA_URI}" x="${(w * 0.08).toFixed(2)}" y="${(footerH * 0.23).toFixed(2)}" width="${(footerH * 0.55).toFixed(2)}" height="${(footerH * 0.55).toFixed(2)}" clip-path="url(#linktoqr-brand-logo-clip)" preserveAspectRatio="xMidYMid slice" />
+            <text x="${(w * 0.08 + footerH * 0.75).toFixed(2)}" y="${(footerH * 0.48).toFixed(2)}" font-family="system-ui, -apple-system, sans-serif" font-weight="bold" font-size="${(footerH * 0.25).toFixed(2)}" fill="${titleColor}">Link to <tspan fill="#6366f1">QR</tspan></text>
+            <text x="${(w * 0.08 + footerH * 0.75).toFixed(2)}" y="${(footerH * 0.72).toFixed(2)}" font-family="system-ui, -apple-system, sans-serif" font-weight="600" font-size="${(footerH * 0.16).toFixed(2)}" fill="${subColor}">linktoqr.in • Free QR Code</text>
+          </g></svg>`;
+          svgString = svgString.replace('</svg>', brandingSvg);
+        }
+      }
 
       const blob = new Blob([svgString], { type: 'image/svg+xml' });
       const url = URL.createObjectURL(blob);
@@ -280,7 +337,11 @@ export const QrGeneratorCard: React.FC<QrGeneratorCardProps> = ({ onOpenScanModa
       URL.revokeObjectURL(url);
 
       triggerConfetti();
-      showToast('Scalable Vector SVG Downloaded!');
+      showToast(
+        config.includeBranding !== false
+          ? 'Scalable Vector SVG Downloaded with Link to QR branding!'
+          : 'Scalable Vector SVG Downloaded!'
+      );
     } catch (e) {
       console.error(e);
     }
@@ -887,6 +948,24 @@ export const QrGeneratorCard: React.FC<QrGeneratorCardProps> = ({ onOpenScanModa
                     <option value={2048}>2048 x 2048 px (Print Vector)</option>
                   </select>
                 </div>
+
+                {/* Include Website Branding Default Note */}
+                <div className="col-span-2 pt-2.5 border-t border-slate-200/50 dark:border-slate-800/50 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <img src="/brand-logo.jpg" alt="Logo" className="w-4 h-4 rounded-xs object-cover" />
+                    <div>
+                      <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 block">
+                        Website Name & Logo Included (Default)
+                      </span>
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                        Automatically embeds &quot;Link to QR • linktoqr.in&quot; brand emblem on downloaded QR codes
+                      </span>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                    Always Included
+                  </span>
+                </div>
               </div>
 
               {/* Mobile Quick Jump to Live Preview Button */}
@@ -936,7 +1015,7 @@ export const QrGeneratorCard: React.FC<QrGeneratorCardProps> = ({ onOpenScanModa
               </div>
 
               {/* QR Payload Summary Banner */}
-              <div className="w-full bg-slate-800/80 px-3 py-2 rounded-xl border border-slate-700/60 text-center mb-5">
+              <div className="w-full bg-slate-800/80 px-3 py-2 rounded-xl border border-slate-700/60 text-center mb-4">
                 <p className="text-[11px] font-mono text-slate-300 truncate max-w-full">
                   {generateQrPayload(config)}
                 </p>
