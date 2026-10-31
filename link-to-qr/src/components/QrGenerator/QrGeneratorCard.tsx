@@ -1108,3 +1108,4 @@ export const QrGeneratorCard: React.FC<QrGeneratorCardProps> = ({ onOpenScanModa
     </div>
   );
 };
+
