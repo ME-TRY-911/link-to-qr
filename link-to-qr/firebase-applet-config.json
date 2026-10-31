@@ -1,0 +1,12 @@
+{
+  "projectId": "gayaji-store",
+  "appId": "1:271763220021:web:32b238fd0c0c02b690737c",
+  "apiKey": "AIzaSyB-RkfzibcD26Sxlrnzdgy0UqtEicj4S5c",
+  "authDomain": "gayaji-store.firebaseapp.com",
+  "firestoreDatabaseId": "(default)",
+  "storageBucket": "gayaji-store.firebasestorage.app",
+  "messagingSenderId": "271763220021",
+  "measurementId": "",
+  "oAuthClientId": "",
+  "recaptchaSiteKey": ""
+}

@@ -1,0 +1,99 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile information synchronized upon authentication.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the user."
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "User display name."
+        },
+        "email": {
+          "type": "string",
+          "maxLength": 256,
+          "description": "User email address."
+        },
+        "avatar": {
+          "type": "string",
+          "maxLength": 2048,
+          "description": "User avatar image URL."
+        },
+        "plan": {
+          "type": "string",
+          "enum": ["Free", "Pro", "Enterprise"],
+          "description": "Account subscription plan."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO timestamp of account creation."
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp of last profile update."
+        }
+      },
+      "required": ["uid", "name", "email", "plan", "createdAt"]
+    },
+    "SavedQr": {
+      "title": "SavedQr",
+      "description": "User saved QR code configuration and payload.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "Document ID."
+        },
+        "userId": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "Firebase Auth UID of the owner."
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "User given title for the QR code."
+        },
+        "type": {
+          "type": "string",
+          "maxLength": 32,
+          "description": "QR Code data type (e.g. url, text, wifi, vcard, etc)."
+        },
+        "payload": {
+          "type": "string",
+          "maxLength": 4096,
+          "description": "Encoded text or content string of the QR code."
+        },
+        "config": {
+          "type": "object",
+          "description": "Full styling and configuration object."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO timestamp when saved."
+        }
+      },
+      "required": ["id", "userId", "name", "type", "payload", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserProfile"
+      },
+      "description": "User profile documents keyed by Auth UID."
+    },
+    "/users/{userId}/savedQrs/{qrId}": {
+      "schema": {
+        "$ref": "#/entities/SavedQr"
+      },
+      "description": "Sub-collection of saved QR codes belonging to a specific user."
+    }
+  }
+}
