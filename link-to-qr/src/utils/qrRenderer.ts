@@ -1,11 +1,23 @@
 import QRCode from 'qrcode';
 import { QrConfig } from '../types';
 import { getCachedImage } from './cacheManager';
+import { BRAND_LOGO_DATA_URI } from './brandLogoData';
+
+// Pre-instantiate brand logo in memory so it is ready immediately for canvas render
+let preloadedBrandLogo: HTMLImageElement | null = null;
+if (typeof window !== 'undefined') {
+  try {
+    preloadedBrandLogo = new Image();
+    preloadedBrandLogo.src = BRAND_LOGO_DATA_URI;
+  } catch {
+    // Ignore in non-browser environments
+  }
+}
 
 /**
- * Helper to draw rounded rectangle with cross-browser safety fallback
+ * Path helper to construct a rounded rectangle path without filling or stroking
  */
-function drawRoundRect(
+function pathRoundRect(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
@@ -13,16 +25,14 @@ function drawRoundRect(
   height: number,
   radii: number | number[]
 ) {
+  ctx.beginPath();
   if (typeof ctx.roundRect === 'function') {
-    ctx.beginPath();
     ctx.roundRect(x, y, width, height, radii);
-    ctx.fill();
     return;
   }
 
-  // Fallback for older environments
+  // Fallback for older canvas implementations
   const r = typeof radii === 'number' ? radii : radii[0] || 0;
-  ctx.beginPath();
   ctx.moveTo(x + r, y);
   ctx.lineTo(x + width - r, y);
   ctx.quadraticCurveTo(x + width, y, x + width, y + r);
@@ -33,7 +43,44 @@ function drawRoundRect(
   ctx.lineTo(x, y + r);
   ctx.quadraticCurveTo(x, y, x + r, y);
   ctx.closePath();
+}
+
+function fillRoundRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radii: number | number[]
+) {
+  pathRoundRect(ctx, x, y, width, height, radii);
   ctx.fill();
+}
+
+function strokeRoundRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radii: number | number[]
+) {
+  pathRoundRect(ctx, x, y, width, height, radii);
+  ctx.stroke();
+}
+
+/**
+ * Helper to draw filled rounded rectangle with cross-browser safety fallback
+ */
+function drawRoundRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radii: number | number[]
+) {
+  fillRoundRect(ctx, x, y, width, height, radii);
 }
 
 function pathBadgeShape(
@@ -82,6 +129,20 @@ function isFinderPattern(row: number, col: number, size: number): boolean {
   return false;
 }
 
+function isColorDark(hexColor: string): boolean {
+  if (!hexColor || hexColor === 'transparent') return false;
+  let hex = hexColor.replace('#', '');
+  if (hex.length === 3) {
+    hex = hex.split('').map((c) => c + c).join('');
+  }
+  if (hex.length < 6) return false;
+  const r = parseInt(hex.substring(0, 2), 16);
+  const g = parseInt(hex.substring(2, 4), 16);
+  const b = parseInt(hex.substring(4, 6), 16);
+  const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+  return brightness < 135;
+}
+
 export function convertGoogleDriveUrl(url: string): string {
   if (!url) return '';
   const trimmed = url.trim();
@@ -94,7 +155,7 @@ export function convertGoogleDriveUrl(url: string): string {
 }
 
 /**
- * Main QR Canvas Renderer supporting all dot styles, eye shapes, gradient fill, and frame banners
+ * Main QR Canvas Renderer supporting all dot styles, eye shapes, gradient fill, frame banners, and Link to QR branding footer
  */
 export async function renderQrToCanvas(
   canvas: HTMLCanvasElement,
@@ -124,6 +185,10 @@ export async function renderQrToCanvas(
   let qrBottomOffset = 0;
   let qrSideOffset = 0;
 
+  // Website branding footer (default: true so exported QR carries website name & logo)
+  const hasBranding = config.includeBranding !== false;
+  const brandingHeight = hasBranding ? Math.round(targetSize * 0.135) : 0;
+
   const hasFrame = config.frameStyle && config.frameStyle !== 'none';
   const frameText = config.frameText || 'SCAN ME';
 
@@ -142,6 +207,9 @@ export async function renderQrToCanvas(
       canvasHeight += qrTopOffset + qrBottomOffset;
     }
   }
+
+  // Add extra canvas height for the Link to QR branding footer
+  canvasHeight += brandingHeight;
 
   canvas.width = canvasWidth;
   canvas.height = canvasHeight;
@@ -165,7 +233,7 @@ export async function renderQrToCanvas(
 
   // QR Module dimensions
   const availableQrWidth = canvasWidth - qrSideOffset * 2;
-  const availableQrHeight = canvasHeight - qrTopOffset - qrBottomOffset;
+  const availableQrHeight = canvasHeight - qrTopOffset - qrBottomOffset - brandingHeight;
   const qrDimension = Math.min(availableQrWidth, availableQrHeight);
 
   const cellSize = qrDimension / totalModules;
@@ -361,7 +429,7 @@ export async function renderQrToCanvas(
     if (config.frameStyle === 'banner') {
       // Bottom pill banner
       const bannerHeight = qrBottomOffset * 0.7;
-      const bannerY = canvasHeight - qrBottomOffset + (qrBottomOffset - bannerHeight) / 2;
+      const bannerY = canvasHeight - brandingHeight - qrBottomOffset + (qrBottomOffset - bannerHeight) / 2;
       const bannerWidth = canvasWidth * 0.75;
       const bannerX = (canvasWidth - bannerWidth) / 2;
 
@@ -390,12 +458,144 @@ export async function renderQrToCanvas(
       ctx.fillText(frameText.toUpperCase(), canvasWidth / 2, badgeY + badgeHeight / 2);
     } else if (config.frameStyle === 'card') {
       // Card Frame Label
-      const bannerY = canvasHeight - qrBottomOffset + 8;
+      const bannerY = canvasHeight - brandingHeight - qrBottomOffset + 8;
       ctx.fillStyle = typeof fgStyle === 'string' ? fgStyle : config.fgColor;
       ctx.font = `800 ${Math.round(qrBottomOffset * 0.32)}px 'Outfit', sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
       ctx.fillText(frameText.toUpperCase(), canvasWidth / 2, bannerY);
+    }
+  }
+
+  // -------------------------------------------------------------
+  // 5. Draw Website Branding Badge ("Link to QR" + Logo + linktoqr.in)
+  // -------------------------------------------------------------
+  if (hasBranding) {
+    const footerY = canvasHeight - brandingHeight;
+    const footerH = brandingHeight;
+
+    // Detect if background is dark
+    const isDarkBg = !config.transparentBg && isColorDark(config.bgColor || '#ffffff');
+
+    // Outer branding container pill
+    const pillH = Math.round(footerH * 0.72);
+    const pillW = Math.min(canvasWidth * 0.88, canvasWidth - 28);
+    const pillX = (canvasWidth - pillW) / 2;
+    const pillY = footerY + (footerH - pillH) / 2;
+    const pillRadius = Math.round(pillH * 0.35);
+
+    // Pill container styling
+    if (!config.transparentBg) {
+      ctx.fillStyle = isDarkBg ? 'rgba(255, 255, 255, 0.08)' : '#f8fafc';
+      drawRoundRect(ctx, pillX, pillY, pillW, pillH, pillRadius);
+
+      ctx.lineWidth = Math.max(1, Math.round(targetSize * 0.0018));
+      ctx.strokeStyle = isDarkBg ? 'rgba(255, 255, 255, 0.16)' : '#e2e8f0';
+      ctx.stroke();
+    } else {
+      // Semi-solid pill for transparent QR
+      ctx.fillStyle = isDarkBg ? '#0f172a' : '#ffffff';
+      drawRoundRect(ctx, pillX, pillY, pillW, pillH, pillRadius);
+
+      ctx.lineWidth = Math.max(1, Math.round(targetSize * 0.002));
+      ctx.strokeStyle = '#6366f1';
+      ctx.stroke();
+    }
+
+    // Logo icon dimensions
+    const iconSize = Math.round(pillH * 0.72);
+    const iconX = pillX + Math.round((pillH - iconSize) / 2);
+    const iconY = pillY + Math.round((pillH - iconSize) / 2);
+    const iconRadius = Math.round(iconSize * 0.28);
+
+    // Try loading website brand logo (instant preloaded image first, then fallbacks)
+    let brandLogoImg: HTMLImageElement | null = null;
+    if (preloadedBrandLogo && preloadedBrandLogo.complete && preloadedBrandLogo.naturalWidth > 0) {
+      brandLogoImg = preloadedBrandLogo;
+    } else {
+      brandLogoImg = await getCachedImage(BRAND_LOGO_DATA_URI);
+      if (!brandLogoImg) {
+        brandLogoImg = await getCachedImage('/brand-logo.jpg');
+      }
+    }
+
+    if (brandLogoImg && (brandLogoImg.naturalWidth > 0 || brandLogoImg.width > 0)) {
+      ctx.save();
+      // 1. White backing so transparent/dark elements stay crisp
+      ctx.fillStyle = '#ffffff';
+      fillRoundRect(ctx, iconX, iconY, iconSize, iconSize, iconRadius);
+
+      // 2. Clip and draw image
+      ctx.save();
+      pathRoundRect(ctx, iconX, iconY, iconSize, iconSize, iconRadius);
+      ctx.clip();
+      ctx.drawImage(brandLogoImg, iconX, iconY, iconSize, iconSize);
+      ctx.restore();
+
+      // 3. Crisp border around logo (stroke only, without filling on top)
+      ctx.lineWidth = Math.max(1.5, Math.round(iconSize * 0.05));
+      ctx.strokeStyle = '#6366f1';
+      strokeRoundRect(ctx, iconX, iconY, iconSize, iconSize, iconRadius);
+      ctx.restore();
+    } else {
+      // Crisp vector fallback emblem if image not ready
+      const iconGrad = ctx.createLinearGradient(iconX, iconY, iconX + iconSize, iconY + iconSize);
+      iconGrad.addColorStop(0, '#4f46e5');
+      iconGrad.addColorStop(1, '#7c3aed');
+      ctx.fillStyle = iconGrad;
+      fillRoundRect(ctx, iconX, iconY, iconSize, iconSize, iconRadius);
+
+      ctx.fillStyle = '#ffffff';
+      const mPad = iconSize * 0.2;
+      const mSize = iconSize - mPad * 2;
+      fillRoundRect(ctx, iconX + mPad, iconY + mPad, mSize, mSize, mSize * 0.25);
+      ctx.fillStyle = '#4f46e5';
+      const iPad = mPad + mSize * 0.25;
+      const iSize = mSize * 0.5;
+      fillRoundRect(ctx, iconX + iPad, iconY + iPad, iSize, iSize, iSize * 0.25);
+    }
+
+    // Text labels
+    const textStartX = iconX + iconSize + Math.round(pillH * 0.22);
+    const titleFontSize = Math.round(pillH * 0.36);
+    const subtitleFontSize = Math.round(pillH * 0.22);
+
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+
+    // Primary Brand Text: "Link to QR"
+    const titleY = pillY + pillH * 0.35;
+    ctx.font = `800 ${titleFontSize}px 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif`;
+    const textColor = isDarkBg ? '#ffffff' : '#0f172a';
+    ctx.fillStyle = textColor;
+    ctx.fillText('Link to ', textStartX, titleY);
+    const brandPrefixWidth = ctx.measureText('Link to ').width;
+
+    ctx.fillStyle = '#6366f1';
+    ctx.fillText('QR', textStartX + brandPrefixWidth, titleY);
+
+    // Subtitle URL: "linktoqr.in • Free QR Code"
+    const subY = pillY + pillH * 0.72;
+    ctx.font = `600 ${subtitleFontSize}px 'Plus Jakarta Sans', monospace, sans-serif`;
+    ctx.fillStyle = isDarkBg ? '#94a3b8' : '#64748b';
+    ctx.fillText('linktoqr.in  •  Free QR Code', textStartX, subY);
+
+    // Right-aligned verification badge
+    if (pillW > targetSize * 0.62) {
+      const badgeText = '100% FREE';
+      ctx.font = `bold ${Math.round(pillH * 0.18)}px 'Plus Jakarta Sans', sans-serif`;
+      const badgeW = ctx.measureText(badgeText).width + 16;
+      const badgeH = Math.round(pillH * 0.38);
+      const badgeX = pillX + pillW - badgeW - Math.round(pillH * 0.2);
+      const badgeY = pillY + (pillH - badgeH) / 2;
+
+      ctx.fillStyle = isDarkBg ? 'rgba(99, 102, 241, 0.2)' : 'rgba(99, 102, 241, 0.1)';
+      drawRoundRect(ctx, badgeX, badgeY, badgeW, badgeH, 6);
+
+      ctx.fillStyle = isDarkBg ? '#a5b4fc' : '#4f46e5';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(badgeText, badgeX + badgeW / 2, badgeY + badgeH / 2);
     }
   }
 
