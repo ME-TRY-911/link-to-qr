@@ -1,0 +1,6 @@
+{
+  "name": "Link to QR",
+  "description": "Generate custom, high-resolution QR codes in seconds with custom colors, logos, and dynamic tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
