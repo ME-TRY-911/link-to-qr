@@ -29,7 +29,9 @@ export function getCachedImage(url: string): Promise<HTMLImageElement | null> {
 
   const loadPromise = new Promise<HTMLImageElement | null>((resolve) => {
     const img = new Image();
-    img.crossOrigin = 'anonymous';
+    if (!trimmed.startsWith('data:') && !trimmed.startsWith('blob:')) {
+      img.crossOrigin = 'anonymous';
+    }
 
     img.onload = () => {
       imageCacheMap.set(trimmed, img);
